@@ -1,17 +1,27 @@
+import Head from 'next/head'
 import { Button, Flex, Input, NumberDecrementStepper, NumberIncrementStepper, NumberInput, NumberInputField, NumberInputStepper, Text, useToast } from '@chakra-ui/react'
 import { Navbar } from '@/components/Navbar'
+import { useState } from 'react'
+import { useAnchorWallet } from '@solana/wallet-adapter-react'
+import NodeWallet from '@coral-xyz/anchor/dist/cjs/nodewallet'
 import { useRouter } from 'next/router'
 import { EditIcon, ViewIcon } from '@chakra-ui/icons'
 
 
 export default function Home() {
 
+  const [name, setName] = useState<string>('')
+  const [amount, setAmount] = useState<number>(0)
+  const wallet = useAnchorWallet()
   const router = useRouter()
+  const toast = useToast()
+
 
   return (
     <>
 
       <Navbar />
+
 
       <Flex flexFlow="column" gap="1rem" bg="#05070D" align="center" minH="100vh" h="100%" p="0 10rem">
 
@@ -21,19 +31,18 @@ export default function Home() {
 
         <Flex justify="space-around" w="100%">
 
-          <Flex onClick={() => router.push("/create")} flexFlow="column" _hover={{ bg: "gray.700" }} transition="200ms" cursor="pointer" borderRadius="1rem" fontSize="4rem" bg="gray.800" color="white" w="30rem" h="30rem" justify="center" align="center">
+          <Flex onClick={() => router.push("/polls")} flexFlow="column" _hover={{ bg: "gray.700" }} transition="200ms" cursor="pointer" borderRadius="1rem" fontSize="4rem" bg="gray.800" color="white" w="30rem" h="30rem" justify="center" align="center">
             Answer a Poll
             <ViewIcon />
           </Flex>
 
-          <Flex flexFlow="column" _hover={{ bg: "gray.700" }} transition="200ms" cursor="pointer" borderRadius="1rem" fontSize="4rem" bg="gray.800" color="white" w="30rem" h="30rem" justify="center" align="center">
+          <Flex onClick={() => router.push("/create")} flexFlow="column" _hover={{ bg: "gray.700" }} transition="200ms" cursor="pointer" borderRadius="1rem" fontSize="4rem" bg="gray.800" color="white" w="30rem" h="30rem" justify="center" align="center">
             Create a Poll
             <EditIcon />
           </Flex>
         </Flex>
 
       </Flex>
-
 
     </>
   )
