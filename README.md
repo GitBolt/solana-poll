@@ -1,27 +1,28 @@
-# Bank Simulator with Interest
+# Online Solana Poll dApp
 
 ## 🎬 Recorded Sessions
 
 | Link        | Instructor | Event |
 | ----------- | ---------- | ----- |
-| [<img src="https://raw.githubusercontent.com/Solana-Workshops/.github/main/.docs/youtube-icon.png" alt="youtube" width="20" align="center"/> Recording](https://youtu.be/NdAqDliplbs) | Bolt        | Superteam Lurkers on Zoom     |
+| ... | ...        | ...     |
 
 ## ☄️ Open in Solana Playground IDE
 
 | Program         | Link                                                                                                                                                                               |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Bank Simulator | [ ![program](https://ik.imagekit.io/mkpjlhtny/solpg_button_zWM8WlPKs.svg?ik-sdk-version=javascript-1.4.3&updatedAt=1662621556513)](https://beta.solpg.io/645fc8f0d6ebe745da2043a6) |
+| Poll | [ ![program](https://ik.imagekit.io/mkpjlhtny/solpg_button_zWM8WlPKs.svg?ik-sdk-version=javascript-1.4.3&updatedAt=1662621556513)](https://beta.solpg.io/64f49aa26f50baeacc2cd476) |
 
 
 ## 📗 Learn
 
-In this workshop, we'll learn about on-chain automation using Clockwork by simulating interest returns in bank account. In real life, banks offer interest rates of around 2.5% - 7% annually. In our program however, we'll be implementing 5% returns per minute, just to display the balance change considerably enough, otherwise, we would need to wait for a long time to notice a significant change in the balance with the real-world interest rate.
+In this workshop, we'll learn how to create an online poll dApp on Solana. The poll is largely inspired by X (formerly Twitter) poll system.
+We'd be able to create polls, answer polls and close them.
 
 ### How to Build & Run
 
 1. You would need to deploy the program on Solana blockchain first. You can use SolPg to get started quickly or clone this and work locally:
  - SOLPg
-   - Click on the [Solana Playground](https://beta.solpg.io/645fc8f0d6ebe745da2043a6) link and deploy it
+   - Click on the [Solana Playground](https://beta.solpg.io/64f49aa26f50baeacc2cd476) link and deploy it
   - Working Locally
     - Install [Anchor](https://www.anchor-lang.com/), [Rust](https://www.rust-lang.org/tools/install) and [Solana CLI](https://docs.solana.com/cli/install-solana-cli-tools) and [Clockwork CLI](https://docs.clockwork.xyz/welcome/installation) and clone this repository
     - Run `clockwork localnet`
@@ -37,260 +38,335 @@ If you see blockhash keep expiring when you run `anchor deploy` or when running 
 2. To launch the frontend, head over to `/app` directory and enter: `yarn install && yarn dev`
 
 
-### Automation
-
-We'll be using [Clockwork](https://www.clockwork.xyz/) for running a cron job that updates our balance with interest returns every 10 seconds. In the real world, interest returns are deposited on a periodic basis, the interval however is large, like quarterly or yearly. We'll be depositing every 10 seconds to quickly observe changes and understand better.
-
-Clockwork has a thing called [Threads](https://docs.clockwork.xyz/developers/threads), which trigger certain instruction based on a certain trigger condition. For our case, the trigger condition is a Cronjob every 10 seconds.
-
-One important thing about our dApp is that our interest returns will stop after about 5 minutes, the reason for that is that Clockwork requires some amount of fee to run each automation transaction. In our program, we're defining a very small fee. We can increase it to enable our automation to work for a longer time!
-
 ### Anchor Program
+We have four instructions in total and putting them all in one lib.rs file is not the best practice. Hence we have the file structure broken down as follows:
+- instructions folder: having all individual instructions and instruction contexts
+- state.rs: contain our account strucutres
+- errors.rs: storing all error codes
+
 
 Let's go through the code and understand how our program works.
 
-1. Constants
 
-- 1.1 Interest, Cron Schedule, Automation Fee
-- 1.2 Seeds
+1. Accounts
+   - 1.1 Poll Account
+   - 1.2 Poll User Account
+   - 
+2. Actions
+    - 2.1 Creating Poll
+    - 2.2 Creating Poll User
+    - 2.3 Answering Poll
+    - 2.4 Closing Poll
 
-1. Initializing Account
-
-- 2.1 Defining `InitilizeAccount` context
-- 2.2 Defining Clockwork Target Instruction and Trigger
-- 2.3 Making a CPI to Clockwork program
-  
-3. Updating Balance
-- 3.1 Depositing Amount
-- 3.2 Withdrawing Amount
-- 3.3 Adding Interest
+3. Error handling
+   - 3.1 Error definations
+   - 3.2 Using custom error codes
 
 ----
-#### 1.1 Interest, Cron Schedule, Automation Fee
+#### 1.1 Poll Account
 
-First of all, open up [program/programs/program/src/lib.rs](program/programs/program/src/lib.rs)
+First of all, open up [program/programs/poll/src/state.rs](program/programs/poll/src/state.rs)
 
-In the first few lines, we're defining some really important constants. Let's have a look.
+In this file, we are defining our program state, which is stored in accounts. So we're defining our accounts here.
+Let's see our poll account:
 
 ```rust
-// Line 9
+// Line 3
+#[account]
+#[derive(Default)]
+pub struct PollAccount {
+    pub id: u32,
+    pub is_active: bool,
+    pub owner: Pubkey,
+    pub title: String,
+    pub options: Vec<String>,
+    pub selected_options: Vec<u16>,
+    pub ending_timestamp: u64,
+}
+```
 
-const MINUTE_INTEREST: f64 = 0.05; // 5% interest return
-const CRON_SCHEDULE: &str = "*/10 * * * * * *"; // 10s https://crontab.guru/
-const AUTOMATION_FEE: f64 = 0.05; // https://docs.clockwork.xyz/developers/threads/fees
+Above `PollAccount` struct, we have the `#[account]` macro, which is from Anchor program that specifies that this particular struct is representing a Solana account.
+For our poll account, we need to specify certain attributes or fields, note that you can extend/modify these according to your preference and architecture ideas. But lets go through what we have here!
+- id: unique id for each poll account used to identify them
+- is_active: a true or false value determining if a particular poll has ended or not
+- owner: the public key of the person who created the poll
+- title: poll's question
+- options: four poll options as a vector of strings
+- selected_options: another vector of four items, but the items here are numbers representing the number of people who voted for the poll option in that index. For example, if the `options` are `["Yes", "No", "All", "None"]` and `selected_options` is `[0, 2, 3, 1]`, this means the 0 people voted for "Yes", 2 voted for "No", 3 voted for "All" and 1 voted for "None"
+- ending_timestamp: unix timestamp for the date and time when the poll is supposed to end
+  
 
+#### 1.2 Poll User Account
+
+Head over to [program/programs/poll/src/state.rs](program/programs/poll/src/state.rs) again
+
+Let's look into our poll user account now
+
+```rust
+// Line 17
+pub struct PollUserAccount {
+    pub poll_id: u32,
+    pub owner: Pubkey,
+    pub selected_option: u32,
+    pub date_created: u64,
+}
 
 ```
-We first have `CRON_SCHEDULE` constant defined. This format may look confusing, so in order to create your own schedule time, you can use [CronTab Tool](https://crontab.guru/)
+We're ignoring the macros as we've covered them briefly just now.
 
-Then, we have our `AUTOMATION_FEE`, this is the fee we can deposit to our Clockwork thread for it to run automations. According to [Clockwork Docs](https://docs.clockwork.xyz/developers/threads/fees), the automation base fee is **0.000001 SOL / executed instruction**
-
-#### 1.2 Seeds
-
-Have a look into these:
-
-```rs
-// Line 13
-
-pub const BANK_ACCOUNT_SEED: &[u8] = b"bank_account";
-pub const THREAD_AUTHORITY_SEED: &[u8] = b"authority";
-```
-We have some seeds defined, we'll be using these seeds multiple times in our program, so defining them as separate constants is a better practice for readability and easy access if we wanted to change it.
+Let's have a look into this account:
+- poll_id: Id of the poll account for which this user's poll account is created
+- owner: Once again, simply the public key of the user who created this poll account and hence "owns" it
+- selected_option: This is the index of the option that the user selected from the poll.
+- date_created: Simply the date and time of the creationg of this poll account. We don't really need this for our functionality, but storing this as a potentional addition to UI.
+  
 
 ----
 
-#### 2.1 Defining InitilizeAccount context
-Scroll down to line 146 (in [program/programs/program/src/lib.rs](program/programs/program/src/lib.rs)) and see this:
+#### 2.1 Creating poll
+Now, go to [program/programs/poll/src/instructions/create_poll.rs](program/programs/poll/src/instructions/create_poll.rs) and check this instruction context:
 ```rs
+// Line 4
+
 #[derive(Accounts)]
-#[instruction(thread_id: Vec<u8>)]
-pub struct Initialize<'info> {
+#[instruction(id : u32)]
+pub struct InitializePoll<'info> {
     #[account(mut)]
-    pub holder: Signer<'info>,
+    pub authority: Signer<'info>,
 
     #[account(
         init,
-        payer = holder,
-        seeds = [BANK_ACCOUNT_SEED, thread_id.as_ref()],
-        bump,
-        space = 8 + std::mem::size_of::< BankAccount > (),
+        payer = authority,
+        space = 8 + 4 + 32 + (4 + 70) + (4 + 1 * 50) + (4 + 1 * 4) + 8 + 1,
+        seeds = [b"poll", id.to_le_bytes().as_ref()], 
+        bump
     )]
-    pub bank_account: Account<'info, BankAccount>,
-
-    #[account(mut, address = Thread::pubkey(thread_authority.key(), thread_id))]
-    pub thread: SystemAccount<'info>,
-
-    #[account(seeds = [THREAD_AUTHORITY_SEED], bump)]
-    pub thread_authority: SystemAccount<'info>,
-
-    #[account(address = clockwork_sdk::ID)]
-    pub clockwork_program: Program<'info, clockwork_sdk::ThreadProgram>,
+    pub poll_account: Account<'info, PollAccount>,
 
     pub system_program: Program<'info, System>,
 }
+
 ```
 
-We have first defined our `bank_account`, which is derived using our bank account seed constant and a thread id.
-The thread id here is the automation thread by Clockwork whose Id we're passing.
+In instruction contexts, we basically defined how exactly the accounts are supposed to be used and what their roles are in our instruction.
+We have three accounts here, notably `authority`, `poll_account`, `system_program`. Let us go through them one by one:
+- authority: This is the account of the user who called the instruction, and hence is the owner of the poll that will be created.
+- poll_account: This is the most important account. This is a PDA (Program Derived Address), we're passing the seeds as "poll", along with the unique id of the poll account to derive this poll account. This account uses the same structure of poll account we saw above in section 1.1
+- system_program: This is a mandatory program we have to pass in every instruction context, as Solana system program is the native program responsible for most built in instructions.
 
-Along with System program, we also need to pass Clockwork program for this to work. Hence, we're using `clockwork_program` account as well.
+Now, we pass this instruction context in our actual instruction responsible for executing logic, let's have a look into that. Head over to line 21 in the same file:
+```rust
 
-At the bottom, we have our `thread` account and the thread account's `thread_authority`, these are also mandatory accounts for our threads to work.
-
-#### 2.2 Defining Clockwork Target Instruction and Trigger
-This is one of the most important parts of our program. Have a deep look into our `initialize_account` instruction starting at line 20:
-
-```rs
-pub fn initialize_account(
-    ctx: Context<Initialize>,
-    thread_id: Vec<u8>,
-    holder_name: String,
-    balance: f64,
+pub fn handler(
+    ctx: Context<InitializePoll>,
+    id: u32,
+    title: String,
+    options: Vec<String>,
+    ending: u64,
 ) -> Result<()> {
-    let system_program = &ctx.accounts.system_program;
-    let clockwork_program = &ctx.accounts.clockwork_program;
+    let poll_account = &mut ctx.accounts.poll_account;
 
-    let holder = &ctx.accounts.holder;
-    let bank_account = &mut ctx.accounts.bank_account;
+    poll_account.id = id;
+    poll_account.title = title;
+    poll_account.options = options;
+    poll_account.selected_options = [0, 0, 0, 0].to_vec();
+    poll_account.ending_timestamp = ending;
+    poll_account.owner = *ctx.accounts.authority.key;
+    poll_account.is_active = true;
 
-    let thread = &ctx.accounts.thread;
-    let thread_authority = &ctx.accounts.thread_authority;
+    msg!("Created a new poll! Id: {}", id);
+    Ok(())
+}
 
-    bank_account.thread_id = thread_id.clone();
-    bank_account.holder = *holder.key;
-    bank_account.balance = balance;
-    bank_account.holder_name = holder_name;
-    bank_account.created_at = Clock::get().unwrap().unix_timestamp;
+```
+We can see that other than our context, we are passing id, title, options and ending as the parameters in our instruction function. That is because we want the client side code to enter these values, and then, we are simply assinging these values to our `poll_account` that we are getting from our `ctx` (context).
+By default, as soon as a poll is created, it is live, hence we are assinging the `is_active` field to `true`.
+We are also assining the `selected_options` the value of vector with 4 zeroes. That is because when a poll starts, all four options have zero votes.
 
-    // Clockwork Target Instruction
-    let target_ix = Instruction {
-        program_id: ID,
-        accounts: crate::accounts::AddInterest {
-            bank_account: bank_account.key(),
-            thread: thread.key(),
-            thread_authority: thread_authority.key(),
-        }
-        .to_account_metas(Some(true)),
-        data: crate::instruction::AddInterest {
-            _thread_id: thread_id.clone(),
-        }
-        .data(),
-    };
 
-    // Clockwork Trigger
-    let trigger = clockwork_sdk::state::Trigger::Cron {
-        schedule: CRON_SCHEDULE.to_string(),
-        skippable: true,
-    };
+#### 2.2 Creating poll user
+Now, go to [program/programs/poll/src/instructions/create_poll_user.rs](program/programs/poll/src/instructions/create_poll_user.rs) and check this instruction context:
+```rs
+// Line 6
 
-    // Clockwork thread CPI
-    let bump = *ctx.bumps.get("thread_authority").unwrap();
-    clockwork_sdk::cpi::thread_create(
-        CpiContext::new_with_signer(
-            clockwork_program.to_account_info(),
-            clockwork_sdk::cpi::ThreadCreate {
-                payer: holder.to_account_info(),
-                system_program: system_program.to_account_info(),
-                thread: thread.to_account_info(),
-                authority: thread_authority.to_account_info(),
-            },
-            &[&[THREAD_AUTHORITY_SEED, &[bump]]],
-        ),
-        AUTOMATION_FEE as u64 * LAMPORTS_PER_SOL,
-        thread_id,
-        vec![target_ix.into()],
-        trigger,
-    )?;
+pub struct InitializePollUser<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    #[account(
+        init,
+        payer= authority,
+        space = 8 + 4 + 32 + (1 + 4) + 8,
+        seeds = [b"poll_user", authority.key().as_ref(), poll_id.to_le_bytes().as_ref()], 
+        bump
+    )]
+    pub poll_user_account: Account<'info, PollUserAccount>,
+
+    pub system_program: Program<'info, System>,
+}
+
+
+```
+Mostly it is the same as initilize poll user, but only difference is that instead of "poll", we are using the string "poll_user" to derive this PDA
+
+Lets have a look into the instruction:
+```rust
+
+pub fn handler(ctx: Context<InitializePollUser>, poll_id: u32) -> Result<()> {
+    let poll_user_account = &mut ctx.accounts.poll_user_account;
+
+    let clock = Clock::get()?;
+    poll_user_account.poll_id = poll_id;
+    poll_user_account.owner = *ctx.accounts.authority.key;
+    poll_user_account.date_created = clock.unix_timestamp as u64;
+
+    msg!("Created a new poll user! Id: {}", poll_id);
+    Ok(())
+}
+
+```
+In this case, we're doing one thing which is noticebly different, which is using the system `Clock` to get the current time. Since we need to assign the `date_created` value to our user account on creation. We can get the current time from Solana system clock using `Clock::get()?.unix_timestamp`.
+
+
+
+#### 2.3 Answering poll
+Now, go to [program/programs/poll/src/instructions/answer_poll.rs](program/programs/poll/src/instructions/answer_poll.rs) and check this instruction context:
+```rs
+// Line 7
+
+pub struct AnswerPoll<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"poll", poll_id.to_le_bytes().as_ref()], 
+        bump
+    )]
+    pub poll_account: Account<'info, PollAccount>,
+
+    #[account(
+        mut,
+        seeds = [b"poll_user", authority.key().as_ref(), poll_id.to_le_bytes().as_ref()], 
+        bump
+    )]
+    pub poll_user_account: Account<'info, PollUserAccount>,
+
+    pub system_program: Program<'info, System>,
+}
+
+```
+In this case, we are passing both the `poll` and `poll_user` PDA, the reason for that is because we want to update the poll account itself with the vote that the user who called this instruction gave, as well as updating that user's poll user account too with the option they chose to vote. Lets understand this properly by seeing the actual logic in our instruction function:
+
+Lets have a look into the instruction:
+```rust
+// Line 23
+
+pub fn handler(ctx: Context<AnswerPoll>, _poll_id: u32, selected_option: u32) -> Result<()> {
+    let poll_user_account = &mut ctx.accounts.poll_user_account;
+    let poll_account = &mut ctx.accounts.poll_account;
+
+    if poll_user_account.selected_option != 0 {
+        return err!(Errors::AlreadyAnsweredError);
+    }
+    if !poll_account.is_active {
+        return err!(Errors::PollEndedError);
+    }
+    poll_user_account.selected_option = selected_option + 1;
+
+    if selected_option + 1 < poll_account.selected_options.len() as u32 {
+        poll_account.selected_options[selected_option as usize] += 1;
+    } else {
+        return err!(Errors::OptionMustBeInFourIndex);
+    }
 
     Ok(())
 }
+
 ```
+Woah woah what are all those if statements? Do not worry, we are just checking bunch of things before allowing a user to vote for that poll. We will go into them in detail in the error handling section. But for now, we are just making sure a user cannot poll in a poll that has ended, cannot poll for any option more than 4 as 4 is the limit and cannot vote more than once.
 
-This instruction takes in the unique thread id, account holder's name and the initial deposit amount as the `balance` parameter.
+You can notice this function takes in `_poll_id` and `selected_option` parameters. However note that `_poll_id` argument is not even being used in this instruction function, then why are we passing it? Well, that is so that our instruction context can get this ID to derive our account PDAs, otherwise, our context cannot know which poll id is it supposed to use to derive both poll account and poll user account PDAs.
 
-The important part is how our automation is defined and triggered. We need three things for Clockwork automation to work:
-1. Target Instruction
-2. Automation Trigger
-3. CPI to Thread
+In the line `poll_user_account.selected_option = selected_option + 1;`, we are assinging the user's account to have their option selected. Note that we are adding one to it as indexes start with zero and in our client we are considering 0 to be the default value, so for user's selected option would be they have selected nothing, so for the first option, we cannot use zero index and hence must update it to be 1 for first, 2nd for second etc.
 
-We're targeting the `add_interest` instruction, and it's context `AddInterest` for our automation, we'll learn about them in detail later.
+And then in this part:
+```rs
+poll_account.selected_options[selected_option as usize] += 1;
+```
+We are getting the user's selected option index value and incrementing it by one, denoting that now that index's option has one more new vote.
 
-Then, we've defined our trigger, which is a simple cron job for us. It's using the `CRON_SCHEDULE` constant we defined earlier.
 
-Finally, we're making a CPI to clockwork thread, starting at line 69.
+#### 2.4 Closing poll
+Now, go to [program/programs/poll/src/instructions/close_poll.rs](program/programs/poll/src/instructions/close_poll.rs) and check this instruction context:
+This part is super simple, we are just setting the `is_active` value to false, that is it!
+Now, let us understand some error handling.
 
-> Note that in target_ix variable, we're getting `crate::accounts` and `crate::instructions` from Anchor directly at compile time. This is how we're able to get `AddInterest` context accounts and data required without having to import them or do anything else.
-----
+---- 
 
-#### 3.1 Depositing Amount
-Our deposit instruction is fairly simple, navigate to line 84:
+#### 3.1 Error definations
+Now, go to [program/programs/poll/src/errors.rs](program/programs/poll/src/errors.rs)
+Here, we can see this:
+```rs
+#[error_code]
+pub enum Errors {
+    #[msg("Selected option must be either 1,2,3,4")]
+    OptionMustBeInFourIndex,
+    #[msg("Poll already ended")]
+    PollEndedError,
+    #[msg("You Already Answered")]
+    AlreadyAnsweredError,
+}
+```
+Defining custom errors in Anchor is super easy. We just need to define an Enum and have use the msg macro to explain the error, which is followed by the Enum item name being the error's name which we will use in our code to reference.
+
+In our code, we are defining just three custom errors for three situations:
+- When user enters an option beyond 4. Since our poll allows 4 options max (which of course can be extended by you!), we cannot allow a user to enter any value more than 4 and get away!
+- If the poll is already ended, then we want to show a user that they cannot vote for the poll now
+- If the user has answered a poll already, they are not allowed to do it again, and hence we display them the already answered error.
+
+Lets see how we are using this error code in our code
+
+#### 3.2 Using custom error codes
+We are using all of our errors in one instruction alone, which is [answer_poll](program/programs/poll/src/instructions/answer_poll.rs)
+Lets go through the three if statements on by one:
 
 ```rs
-pub fn deposit(ctx: Context<UpdateBalance>, _thread_id: Vec<u8>, amount: f64) -> Result<()> {
-    if amount < 0.0 {
-        return Err(error!(ErrorCode::AmountTooSmall));
-    };
+    if poll_user_account.selected_option != 0 {
+        return err!(Errors::AlreadyAnsweredError);
+    }
+    if !poll_account.is_active {
+        return err!(Errors::PollEndedError);
+    }
+    poll_user_account.selected_option = selected_option + 1;
 
-    let bank_account = &mut ctx.accounts.bank_account;
-    bank_account.balance += amount;
-    Ok(())
-}
-```
-We're simply taking in the thread_id, that is being used in our `UpdateBalance` context as seed to derive our bank account and adding a balance.
-
-We're first making sure deposit balance amount is not in negative using the if condition.
-
-#### 3.2 Withdrawing Amount
-Defined in line 94, our `withdraw` function is almost identical to the `deposit` function. We're just subtracting the amount instead of adding here.
-
-#### 3.3 Adding Interest
-We're using simple compound interest formula in our program to add interest. 
-Head over to [program/programs/program/src/lib.rs](program/programs/program/src/lib.rs)
-Check line 111:
-
-```rs
-pub fn add_interest(ctx: Context<AddInterest>, _thread_id: Vec<u8>) -> Result<()> {
-    let now = Clock::get().unwrap().unix_timestamp;
-
-    let bank_account = &mut ctx.accounts.bank_account;
-    bank_account.updated_at = now;
-
-    let elapsed_time = (now - bank_account.created_at) as f64;
-    let minutes = elapsed_time / 60.0;
-    let accumulated_value = bank_account.balance * (1.0 + (MINUTE_INTEREST)).powf(minutes);
-    bank_account.balance = accumulated_value;
-
-    msg!(
-        "New Balance: {}, Minutes Elasped when Called: {}",
-        accumulated_value,
-        minutes,
-    );
-    Ok(())
-}
+    if selected_option + 1 < poll_account.selected_options.len() as u32 {
+        poll_account.selected_options[selected_option as usize] += 1;
+    } else {
+        return err!(Errors::OptionMustBeInFourIndex);
+    }
 ```
 
-Our `add_interest` instruction simply accepts a thread id, which is used in the context to derive our bank account.
-We're essentially getting the time at which this instruction is called, subtracting it with bank's creation time to get time elasped, and then using compound interest formula to get our final `accumulated_value` and setting it to user's balance. We're also logging this using `msg` macro for debugging purposes.
+- In the first one, we are checking if the user's poll account's `selected_option` value is zero or not, if it is not zero, that means the user already has selected an option, hence we are throwing the AlreadyAnsweredError
+- In the second one, we are getting the `is_active` field, which is true by default, and checking if it's the opposite, i.e: false. If that is the case, the user cannot vote anymore and we show PollEndedError
+- In the third one, we are comparing the user's option and making sure that the selected_options array, having length four, is always greater than the user's selected option, otherwise, a user may vote for an option that does not even exist.
+  
+That is it for our program! Lets understand our client
 
 ### Client Code
 
-Let's go through the code and understand how our client works.
+Let's go through the code and understand how our client works. We are just going to cover the Anchor program integration part, because rest of the things are basic Next.js/React.js stuff.
 
 1. Program setup
    - 1.1 Creating Anchor Provider
    - 1.2 Adding IDL
 
-2. Calling instructions
-   - 2.1 Deriving thread address using Clockwork SDK
-   - 2.2 Depositing and Withdrawing
-  
-3. Fetching Data
-   - 3.1 Fetching our bank accounts
-   - 3.2 Filters in detail
+2. Fetching Data
+   - 2.1 Fetching all polls
+   - 2.2 Fetching polls and user with filters
 
 #### 1.1 Creating Anchor Provider
 
-To get started, we create an Anchor provider, which will interact with our Solana program. Go to [/app/src/util/helper.ts](/app/src/util/helper.ts)
+To get started, we create an Anchor provider, which will interact with our Solana program. Go to [/app/src/util/helper.ts](./app/src/util/helper.ts)
 
 We first create an anchor program provider that will help us interact with our program. Note that it takes in our `IDL`. We will understand more about the IDL next.
 
@@ -314,7 +390,7 @@ export const anchorProgram = (wallet: anchor.Wallet, network?: string) => {
 
 When you build your program, in the `target/` directory, your program's IDL is created. IDL is essentially the structure of your entire program, including all instructions, instruction params and all accounts. The IDL is saved in a JSON file. 
 
-We have to copy it in our client code and save it as a type so that we can easily work with our anchor provider with type annotations and checking. In this repository, the IDL is present in [/app/src/util/idl.ts](/app/src/util/idl.ts) file
+We have to copy it in our client code and save it as a type so that we can easily work with our anchor provider with type annotations and checking. In this repository, the IDL is present in [/app/src/util/idl.ts](./app/src/util/idl.ts) file
 
 We have to first copy the generated IDL JSON from our program's `target/` directory, and paste it as `IDLType` in our client. This will be the type for our IDL Data. Then, define the `IDLData` variable with the exact same IDL JSON, and add the `IDLType` to our `IDLData` object's type. That's it!.
 
