@@ -1,49 +1,101 @@
-import Head from 'next/head'
-import { Button, Flex, Input, NumberDecrementStepper, NumberIncrementStepper, NumberInput, NumberInputField, NumberInputStepper, Text, useToast } from '@chakra-ui/react'
-import { Navbar } from '@/components/Navbar'
-import { useState } from 'react'
-import { useAnchorWallet } from '@solana/wallet-adapter-react'
-import NodeWallet from '@coral-xyz/anchor/dist/cjs/nodewallet'
-import { useRouter } from 'next/router'
-import { EditIcon, ViewIcon } from '@chakra-ui/icons'
+import React, { useState } from 'react';
+import { Flex, Input, Button, Text, useToast } from '@chakra-ui/react';
+import { createPoll } from '@/util/program/createPoll';
+import NodeWallet from '@coral-xyz/anchor/dist/cjs/nodewallet';
+import { useAnchorWallet } from '@solana/wallet-adapter-react';
+import { useRouter } from 'next/router';
 
-
-export default function Home() {
-
-  const [name, setName] = useState<string>('')
-  const [amount, setAmount] = useState<number>(0)
-  const wallet = useAnchorWallet()
+const PollBuilder: React.FC = () => {
+  const [title, setTitle] = useState<string>('');
+  const [options, setOptions] = useState<string[]>(['', '', '', '']);
+  const [endDate, setEndDate] = useState<string>('');
   const router = useRouter()
   const toast = useToast()
 
+  const handleOptionChange = (index: number, value: string) => {
+    const newOptions = [...options];
+    newOptions[index] = value;
+    setOptions(newOptions);
+  };
+
+  const wallet = useAnchorWallet()
+
+  const handleSubmit = async () => {
+    const id = Math.round(Number(Math.random() * 1000))
+    const res = await createPoll(wallet as NodeWallet, id, title, options, +new Date(endDate))
+    console.log(res)
+    if (!res.error) {
+      toast({
+        status: "success",
+        title: "Created a new poll!"
+      })
+      router.push(`/polls/${id}`)
+    }
+
+  };
 
   return (
-    <>
 
-      <Navbar />
+    <Flex flexFlow="column" gap="1rem" bg="#05070D" align="center" minH="100vh" h="100%" p="0 10rem">
 
+      <Flex direction="column" w="50%" mt="100px" bg="#1f1f26" borderRadius="1rem" p="1rem">
+        <Text fontSize="3xl" mb="1rem" textAlign="center" color="white">Create Poll</Text>
 
-      <Flex flexFlow="column" gap="1rem" bg="#05070D" align="center" minH="100vh" h="100%" p="0 10rem">
+        <Text fontSize="sm" color="gray.300">{title.length}/70</Text>
 
-        <Text mt="40px" fontSize="40px" color="white" fontWeight={700}>Welcome to online Solana Poll dApp</Text>
-        <Text fontSize="30px" fontWeight={700} color="#64667B">Choose either</Text>
+        <Input
+          fontSize="1.5rem"
+          placeholder="Poll Question"
+          value={title}
+          height="3rem"
+          color="white"
+          onChange={(e) => setTitle(e.target.value)}
+          mb="1rem"
+          border="1px solid"
+          borderColor="gray.700"
+          bg="gray.800"
+          maxLength={70}
+        />
 
-
-        <Flex justify="space-around" w="100%">
-
-          <Flex onClick={() => router.push("/polls")} flexFlow="column" _hover={{ bg: "gray.700" }} transition="200ms" cursor="pointer" borderRadius="1rem" fontSize="4rem" bg="gray.800" color="white" w="30rem" h="30rem" justify="center" align="center">
-            Answer a Poll
-            <ViewIcon />
+        {options.map((option, index) => (
+          <Flex direction="column" mb="1rem" key={index}>
+            <Text fontSize="sm" color="gray.300">{option.length}/50</Text>
+            <Input
+              fontSize="1.5rem"
+              bg="gray.800"
+              border="1px solid"
+              borderColor="gray.700"
+              height="3rem"
+              placeholder={`Option ${index + 1}`}
+              value={option}
+              onChange={(e) => handleOptionChange(index, e.target.value)}
+              color="white"
+              maxLength={50}
+            />
           </Flex>
+        ))}
 
-          <Flex onClick={() => router.push("/create")} flexFlow="column" _hover={{ bg: "gray.700" }} transition="200ms" cursor="pointer" borderRadius="1rem" fontSize="4rem" bg="gray.800" color="white" w="30rem" h="30rem" justify="center" align="center">
-            Create a Poll
-            <EditIcon />
-          </Flex>
-        </Flex>
+        <Input
+          mt="1rem"
+          fontSize="1.5rem"
+          bg="gray.800"
+          border="1px solid"
+          type="date"
+          placeholder="End Date"
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
+          mb="1rem"
+          height="3rem"
+          borderColor="gray.700"
+          color="white"
+        />
 
+        <Button colorScheme="blue" w="80%" alignSelf="center" onClick={handleSubmit}>
+          Submit
+        </Button>
       </Flex>
+    </Flex>
+  );
+};
 
-    </>
-  )
-}
+export default PollBuilder;

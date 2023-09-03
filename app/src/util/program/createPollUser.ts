@@ -27,7 +27,7 @@ export const createPollUser = async (
         pollUserAccount,
         authority: wallet.publicKey,
         systemProgram: anchor.web3.SystemProgram.programId,
-      }).rpc()
+      }).instruction()
 
     return { error: false, sig }
 

@@ -8,7 +8,7 @@ export const createPoll = async (
   options: string[],
   endDate: number,
 ) => {
-
+  console.log(endDate)
   const program = anchorProgram(wallet);
 
   const [pollAccount] = anchor.web3.PublicKey.findProgramAddressSync(
