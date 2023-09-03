@@ -1,4 +1,4 @@
-import { Flex, Text } from '@chakra-ui/react'
+import { Button, Flex, Text, useToast } from '@chakra-ui/react'
 import { Navbar } from '@/components/Navbar'
 import { useEffect, useState } from 'react'
 import { useAnchorWallet } from '@solana/wallet-adapter-react'
@@ -10,6 +10,7 @@ import { Connection, PublicKey, Transaction, sendAndConfirmTransaction } from '@
 import { createPollUser } from '@/util/program/createPollUser'
 import { DEVNET_RPC } from '@/util/constants'
 import { answerPoll } from '@/util/program/answerPoll'
+import { stopPoll } from '@/util/program/stopPoll'
 
 
 export default function Home() {
@@ -21,7 +22,7 @@ export default function Home() {
     const [reload, setReload] = useState<number>(0)
     const [alreadyAnswered, setAlreadyAnswered] = useState<number>(0);
 
-
+    const toast = useToast()
     useEffect(() => {
 
         const fetchData = async () => {
@@ -43,7 +44,17 @@ export default function Home() {
         fetchData()
     }, [reload])
 
+    const closePoll = async () => {
+        const res = await stopPoll(wallet as NodeWallet, Number(router.query.id))
 
+        if (!res.error) {
+            toast({
+                status: "success",
+                title: "Poll Closed"
+            })
+        }
+        setReload(+ new Date())
+    }
     const handleClick = async (index: number) => {
         if (!wallet) return
 
@@ -103,7 +114,7 @@ export default function Home() {
                             cursor={alreadyAnswered ? "default" : "pointer"}
                             justify="space-between"
                             key={op}
-                            bg={index == alreadyAnswered-1 ? "#4d5082" : "gray.800"}
+                            bg={index == alreadyAnswered - 1 ? "#4d5082" : "gray.800"}
                             fontSize="1.5rem"
                             color="white"
                             borderRadius="1rem"
@@ -114,24 +125,28 @@ export default function Home() {
                             <div style={{ padding: '10px' }}>
                                 {op}
                             </div>
-                            <div style={{ padding: '10px' }}>
+                            {alreadyAnswered ? <> <div style={{ padding: '10px' }}>
                                 {`${voteCount} votes (${percentage}%)`}
                             </div>
-                            <div
-                                style={{
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
-                                    height: '100%',
-                                    width: `${percentage}%`,
-                                    backgroundColor: '#5f6673',
-                                    opacity: 0.5,
-                                    borderRadius: '1rem'
-                                }}
-                            ></div>
+                                <div
+                                    style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        height: '100%',
+                                        width: `${percentage}%`,
+                                        backgroundColor: '#5f6673',
+                                        opacity: 0.5,
+                                        borderRadius: '1rem'
+                                    }}
+                                ></div>
+                            </>
+                            : null}
                         </Flex>
                     );
                 })}
+                {data && data.account.isActive == false && <Text fontSize="2rem" color="gray.600" fontWeight={600}>Poll has ended</Text>}
+                {data && wallet && data.account.owner.toBase58() == wallet?.publicKey.toBase58() && data.account.isActive && <Button colorScheme="red" w="20%" h="3rem" fontSize="1.5rem" mt="2rem" onClick={() => closePoll()}>Close Poll</Button>}
 
             </Flex>
 

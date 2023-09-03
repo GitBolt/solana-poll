@@ -62,7 +62,7 @@ export default function Home() {
                     <Stack spacing="1rem" marginTop="1rem" width="60%">
                         {data.map((d) => (
                             <Box
-                            _hover={{filter:"brightness(120%)"}}
+                                _hover={{filter:"brightness(120%)"}}
                                 key={d.publicKey.toBase58()}
                                 backgroundColor="gray.800"
                                 borderRadius="1rem"
@@ -76,9 +76,9 @@ export default function Home() {
                                 <Text fontSize="1.5rem" fontWeight="bold">
                                     {d.account.title}
                                 </Text>
-                                <Text fontSize="1rem" color="gray.400">
+                                {d && d.account.isActive ? <Text fontSize="1rem" color="gray.400">
                                     Poll Ending Date: {new Date(d.account.endingTimestamp.toNumber()).toLocaleDateString()}
-                                </Text>
+                                </Text> : <Text fontSize="1rem" color="gray.400">Poll has ended. Click to see results</Text>}
                                 <Text fontSize="1rem" color="gray.400">
                                     Users Participated: {d.account.selectedOptions.reduce((partialSum: number, a: any) => partialSum + a, 0)}
                                 </Text>

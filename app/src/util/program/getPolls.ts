@@ -4,11 +4,12 @@ import { anchorProgram } from '@/util/helper';
 export const getPolls = async (
   wallet: anchor.Wallet,
   userOnly?: boolean,
+  showEnded?: boolean,
 ) => {
   const program = anchorProgram(wallet);
 
   try {
-    let data = await program.account.pollAccount.all([
+    let data = await program.account.pollAccount.all(showEnded ? undefined : [
       {
         memcmp: {
           offset: 8 + 4,
