@@ -1,5 +1,6 @@
 # Online Solana Poll dApp
 
+Presentation Link: https://pitch.com/public/a28e29ce-83f7-4686-8b0f-6b76ca2b3681
 ## 🎬 Recorded Sessions
 
 | Link        | Instructor | Event |
